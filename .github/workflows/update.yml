@@ -8,10 +8,8 @@ on:
 jobs:
   build-and-run:
     runs-on: ubuntu-latest
-    # --- 添加以下权限声明 ---
     permissions:
       contents: write
-    # -----------------------
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -29,6 +27,6 @@ jobs:
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          git add rules.txt
-          # 只有在文件有变动时才提交，防止空提交导致报错
+          # 添加所有生成的 txt 文件
+          git add *.txt
           git diff --quiet && git diff --staged --quiet || (git commit -m "Update rules: $(date)" && git push)
