@@ -2,12 +2,16 @@ name: Update Proxy Rules
 
 on:
   schedule:
-    - cron: '0 0 * * *' # 每天北京时间上午 8 点左右运行
-  workflow_dispatch:      # 允许手动触发
+    - cron: '0 0 * * *'
+  workflow_dispatch:
 
 jobs:
   build-and-run:
     runs-on: ubuntu-latest
+    # --- 添加以下权限声明 ---
+    permissions:
+      contents: write
+    # -----------------------
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -15,13 +19,16 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+
       - name: Build and Run
-        run: |
-          cargo run
+        run: cargo run
 
       - name: Commit and Push
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           git add rules.txt
+          # 只有在文件有变动时才提交，防止空提交导致报错
           git diff --quiet && git diff --staged --quiet || (git commit -m "Update rules: $(date)" && git push)
