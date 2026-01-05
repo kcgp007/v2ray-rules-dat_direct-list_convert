@@ -2,17 +2,20 @@ name: Update Proxy Rules
 
 on:
   schedule:
-    - cron: '0 0 * * *'
-  workflow_dispatch:
+    - cron: '0 0 * * *' # 每天北京时间上午 8 点运行
+  workflow_dispatch:      # 允许手动触发
 
 jobs:
   build-and-run:
     runs-on: ubuntu-latest
+    # 设置权限：需要写入内容到仓库，以及写入权限来清理 Actions 记录
     permissions:
       contents: write
+      actions: write
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -27,6 +30,15 @@ jobs:
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          # 添加所有生成的 txt 文件
           git add *.txt
+          # 仅在有内容变化时提交，避免报错
           git diff --quiet && git diff --staged --quiet || (git commit -m "Update rules: $(date)" && git push)
+
+      # 自动清理步骤：保留最近 7 天的记录
+      - name: Delete old workflow runs
+        uses: Mattraiano/delete-workflow-runs@v2
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          retain_days: 7          # 保留最近 7 天的记录
+          keep_minimum_runs: 7    # 无论如何至少保留最近 7 次运行记录
