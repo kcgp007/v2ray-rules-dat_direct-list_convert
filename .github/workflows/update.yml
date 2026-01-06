@@ -1,44 +1,53 @@
-name: Update Proxy Rules
+name: Update Proxy Rules # 工作流名称
 
 on:
   schedule:
-    - cron: '0 0 * * *' # 每天北京时间上午 8 点运行
-  workflow_dispatch:      # 允许手动触发
+    - cron: '0 0 * * *' # 定时任务：每天 UTC 0点（北京时间早8点）运行
+  workflow_dispatch:      # 允许在 GitHub Actions 页面点击按钮手动触发运行
 
 jobs:
   build-and-run:
-    runs-on: ubuntu-latest
-    # 设置权限：需要写入内容到仓库，以及写入权限来清理 Actions 记录
+    runs-on: ubuntu-latest # 使用最新的 Ubuntu 虚拟环境
     permissions:
-      contents: write
-      actions: write
+      contents: write      # 赋予机器人提交代码到仓库的权限
+      actions: write       # 赋予机器人删除 Actions 运行记录的权限
 
     steps:
+      # 1. 拉取本仓库的代码
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # 2. 配置 Rust 编译环境
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
+      # 3. 配置 Rust 缓存，避免每次都重新下载和编译依赖库，提速显著
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
 
+      # 4. 运行 Rust 程序开始转换
       - name: Build and Run
         run: cargo run
 
+      # 5. 提交生成的 .txt 文件回 GitHub 仓库
       - name: Commit and Push
         run: |
+          # 配置 Git 机器人信息
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
+          # 添加所有生成的文本文件
           git add *.txt
-          # 仅在有内容变化时提交，避免报错
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Update rules: $(date)" && git push)
+          # 检查是否有内容变化，如果有则提交并推送
+          git diff --quiet && git diff --staged --quiet || (git commit -m "自动更新规则: $(date)" && git push)
 
-      # 自动清理步骤：保留最近 7 天的记录
+      # 6. 使用 GitHub 官方 CLI 清理历史运行记录，只保留最近 7 次
       - name: Delete old workflow runs
-        uses: Mattraiano/delete-workflow-runs@v2
-        with:
-          token: ${{ github.token }}
-          repository: ${{ github.repository }}
-          retain_days: 7          # 保留最近 7 天的记录
-          keep_minimum_runs: 7    # 无论如何至少保留最近 7 次运行记录
+        run: |
+          # 逻辑说明：
+          # gh run list: 列出运行记录
+          # --limit 100: 获取最近100条
+          # -q '.[7:].databaseId': 使用 jq 过滤语法，跳过前 7 条记录，获取之后所有记录的 ID
+          # xargs: 将获取到的 ID 传递给删除命令
+          gh run list --workflow update.yml --limit 100 --json databaseId -q '.[7:].databaseId' | xargs -I {} gh run delete {}
+        env:
+          GITHUB_TOKEN: ${{ github.token }} # 传递必要的验证凭据
