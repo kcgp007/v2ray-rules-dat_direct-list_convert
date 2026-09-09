@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
-use base64::{engine::general_purpose, Engine as _};
-use chrono::Utc;
+use base64::{Engine as _, engine::general_purpose};
+use chrono::{FixedOffset, Utc};
 use reqwest::blocking::get;
 use std::fs::File;
 use std::io::{BufWriter, Write};
@@ -33,8 +33,7 @@ fn main() -> Result<()> {
 /// 核心转换函数
 fn convert_url_to_file(url: &str, output_filename: &str) -> Result<usize> {
     // 1. 发起网络请求下载原始文件内容
-    let response = get(url)
-        .context(format!("下载 {} 失败", url))?;
+    let response = get(url).context(format!("下载 {} 失败", url))?;
 
     if !response.status().is_success() {
         anyhow::bail!("获取 {} 返回 HTTP {}", url, response.status());
@@ -47,7 +46,13 @@ fn convert_url_to_file(url: &str, output_filename: &str) -> Result<usize> {
     // 2. 初始化明文缓冲区，并添加 AutoProxy 必需的头部标识
     let mut raw_content = String::with_capacity(content.len() * 2);
     raw_content.push_str("[AutoProxy 0.2.9]\n"); // 插件识别标志
-    raw_content.push_str(&format!("! 更新时间: {}\n", Utc::now().to_rfc3339()));
+    // 生成北京时间（UTC+8）可读格式的时间戳
+    let beijing_offset = FixedOffset::east_opt(8 * 3600).expect("无效的时区偏移");
+    let beijing_time = Utc::now().with_timezone(&beijing_offset);
+    raw_content.push_str(&format!(
+        "! 更新时间: {}\n",
+        beijing_time.format("%Y-%m-%d %H:%M:%S (北京时间)")
+    ));
     raw_content.push_str(&format!("! 数据来源: {}\n", url));
 
     let mut count = 0;
