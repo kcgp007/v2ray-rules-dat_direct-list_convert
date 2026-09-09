@@ -25,20 +25,42 @@ jobs:
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
 
+      # 3.5 代码格式检查
+      - name: Format check
+        run: cargo fmt --check
+
+      # 3.6 静态分析检查
+      - name: Clippy lint
+        run: cargo clippy -- -D warnings
+
       # 4. 运行 Rust 程序开始转换
       - name: Build and Run
         run: cargo run
 
-      # 5. 提交生成的 .txt 文件回 GitHub 仓库
-      - name: Commit and Push
+      # 5. 将生成的订阅文件发布到 GitHub Release（tag: latest），保持订阅 URL 稳定
+      - name: Publish to Release
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          # 配置 Git 机器人信息
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-          # 添加所有生成的文本文件
-          git add *.txt
-          # 检查是否有内容变化，如果有则提交并推送
-          git diff --quiet && git diff --staged --quiet || (git commit -m "自动更新规则: $(date)" && git push)
+          set -euo pipefail
+
+          if gh release view latest >/dev/null 2>&1; then
+            # Release 已存在 -> 原地覆盖（clobber）两个资产，不删除 tag，避免 orphaned-draft 竞态
+            echo "Release 'latest' 已存在，覆盖资产"
+            gh release upload latest direct.txt proxy.txt --clobber
+          else
+            # Release 不存在 -> 创建 tag + release 并上传两个资产
+            echo "创建 Release 'latest'"
+            gh release create latest direct.txt proxy.txt \
+              --target "$GITHUB_SHA" \
+              --title "Direct/Proxy subscription lists (daily)" \
+              --notes "每日自动发布。稳定订阅地址：
+              https://github.com/$GITHUB_REPOSITORY/releases/download/latest/direct.txt
+              https://github.com/$GITHUB_REPOSITORY/releases/download/latest/proxy.txt"
+          fi
+
+          # 保持该 Release 为 "Latest" 标记（防御性）
+          gh release edit latest --latest --title "Direct/Proxy subscription lists (daily)" || true
 
       # 6. 使用 GitHub 官方 CLI 清理历史运行记录，只保留最近 7 次
       - name: Delete old workflow runs

@@ -13,10 +13,10 @@
 
 请在 ZeroOmega / SwitchyOmega 的“规则列表网址”中直接使用以下链接：
 
-| 规则类型 | 原始数据源 | AutoProxy 订阅地址 (Raw) |
+| 规则类型 | 原始数据源 | AutoProxy 订阅地址 (Release) |
 | :--- | :--- | :--- |
-| **直连列表 (Direct)** | `direct-list.txt` | `https://raw.githubusercontent.com/kcgp007/v2ray-rules-dat_direct-list_convert/main/direct.txt` |
-| **代理列表 (Proxy)** | `proxy-list.txt` | `https://raw.githubusercontent.com/kcgp007/v2ray-rules-dat_direct-list_convert/main/proxy.txt` |
+| **直连列表 (Direct)** | `direct-list.txt` | `https://github.com/kcgp007/v2ray-rules-dat_direct-list_convert/releases/download/latest/direct.txt` |
+| **代理列表 (Proxy)** | `proxy-list.txt` | `https://github.com/kcgp007/v2ray-rules-dat_direct-list_convert/releases/download/latest/proxy.txt` |
 
 ## 🛠 使用方法
 

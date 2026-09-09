@@ -1,19 +1,20 @@
-use std::fs::File;
-use std::io::Write;
-use reqwest::blocking::get;
+use anyhow::{Context, Result};
+use base64::{engine::general_purpose, Engine as _};
 use chrono::Utc;
-use base64::{Engine as _, engine::general_purpose};
+use reqwest::blocking::get;
+use std::fs::File;
+use std::io::{BufWriter, Write};
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<()> {
     // 定义任务列表：(源 V2Ray 格式 URL, 输出的文件名)
     let tasks = [
         (
             "https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/release/direct-list.txt",
-            "direct.txt"
+            "direct.txt",
         ),
         (
             "https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/release/proxy-list.txt",
-            "proxy.txt"
+            "proxy.txt",
         ),
     ];
 
@@ -30,13 +31,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// 核心转换函数
-fn convert_url_to_file(url: &str, output_filename: &str) -> Result<usize, Box<dyn std::error::Error>> {
+fn convert_url_to_file(url: &str, output_filename: &str) -> Result<usize> {
     // 1. 发起网络请求下载原始文件内容
-    let response = get(url)?;
-    let content = response.text()?;
+    let response = get(url)
+        .context(format!("下载 {} 失败", url))?;
+
+    if !response.status().is_success() {
+        anyhow::bail!("获取 {} 返回 HTTP {}", url, response.status());
+    }
+
+    let content = response
+        .text()
+        .context(format!("读取 {} 响应体失败", url))?;
 
     // 2. 初始化明文缓冲区，并添加 AutoProxy 必需的头部标识
-    let mut raw_content = String::new();
+    let mut raw_content = String::with_capacity(content.len() * 2);
     raw_content.push_str("[AutoProxy 0.2.9]\n"); // 插件识别标志
     raw_content.push_str(&format!("! 更新时间: {}\n", Utc::now().to_rfc3339()));
     raw_content.push_str(&format!("! 数据来源: {}\n", url));
@@ -77,7 +86,7 @@ fn convert_url_to_file(url: &str, output_filename: &str) -> Result<usize, Box<dy
     let b64_content = general_purpose::STANDARD.encode(raw_content);
 
     // 4. 将编码后的字符串写入本地文件
-    let mut output = File::create(output_filename)?;
+    let mut output = BufWriter::new(File::create(output_filename)?);
     output.write_all(b64_content.as_bytes())?;
 
     Ok(count)
