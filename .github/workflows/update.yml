@@ -5,6 +5,11 @@ on:
     - cron: '0 0 * * *' # 定时任务：每天 UTC 0点（北京时间早8点）运行
   workflow_dispatch:      # 允许在 GitHub Actions 页面点击按钮手动触发运行
 
+# 防止定时触发与手动触发同时运行，产生 Release 竞态
+concurrency:
+  group: update-rules
+  cancel-in-progress: true
+
 jobs:
   build-and-run:
     runs-on: ubuntu-latest # 使用最新的 Ubuntu 虚拟环境

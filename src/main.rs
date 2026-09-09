@@ -76,7 +76,7 @@ fn convert_url_to_file(url: &str, output_filename: &str) -> Result<usize> {
             format!("/{}/", re)
         } else if let Some(kw) = line.strip_prefix("keyword:") {
             // keyword:google -> google (关键词匹配)
-            kw.to_string()
+            kw.to_owned()
         } else {
             // 如果没有前缀，默认按域名匹配处理
             format!("||{}", line)
