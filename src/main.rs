@@ -18,13 +18,24 @@ fn main() -> Result<()> {
         ),
     ];
 
-    // 遍历任务列表进行转换
+    // 遍历任务列表进行转换；收集失败项，避免部分失败时仍以退出码 0 结束（导致 CI 发布不完整的订阅）
+    let mut failures: Vec<&str> = Vec::new();
     for (url, filename) in tasks {
         println!("正在处理: {} -> {}", url, filename);
         match convert_url_to_file(url, filename) {
             Ok(count) => println!("成功转换 {} 条规则到 {}", count, filename),
-            Err(e) => eprintln!("处理 {} 时出错: {}", filename, e),
+            Err(e) => {
+                eprintln!("处理 {} 时出错: {:#}", filename, e);
+                failures.push(filename);
+            }
         }
+    }
+
+    if !failures.is_empty() {
+        anyhow::bail!(
+            "以下列表转换失败: {}，中止以免发布过期/不完整的订阅",
+            failures.join(", ")
+        );
     }
 
     Ok(())

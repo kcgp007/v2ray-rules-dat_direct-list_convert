@@ -67,6 +67,12 @@ jobs:
           # 保持该 Release 为 "Latest" 标记（防御性）
           gh release edit latest --latest --title "Direct/Proxy subscription lists (daily)" || true
 
+      # 5.5 将 tag `latest` 强制同步到本次提交
+      # Release 创建时的 --target 只在建 tag 那一刻生效，之后不会更新，
+      # 否则 tag 会一直停留在首次发布时的陈旧提交上（源码包与提交历史不一致）
+      - name: Sync release tag to HEAD
+        run: git push --force origin "$GITHUB_SHA:refs/tags/latest"
+
       # 6. 使用 GitHub 官方 CLI 清理历史运行记录，只保留最近 7 次
       - name: Delete old workflow runs
         run: |
