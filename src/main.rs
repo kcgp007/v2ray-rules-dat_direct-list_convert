@@ -1,9 +1,17 @@
 use anyhow::{Context, Result};
 use base64::{Engine as _, engine::general_purpose};
 use chrono::{FixedOffset, Utc};
-use reqwest::blocking::get;
+use reqwest::blocking::Client;
 use std::fs::File;
 use std::io::{BufWriter, Write};
+use std::time::Duration;
+
+/// 下载最大尝试次数（首次 + 2 次重试）
+const MAX_ATTEMPTS: u32 = 3;
+/// 单次请求总超时（下载约 2 MB 列表）
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
+/// 建立连接超时
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
 fn main() -> Result<()> {
     // 定义任务列表：(源 V2Ray 格式 URL, 输出的文件名)
@@ -41,18 +49,71 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-/// 核心转换函数
-fn convert_url_to_file(url: &str, output_filename: &str) -> Result<usize> {
-    // 1. 发起网络请求下载原始文件内容
-    let response = get(url).context(format!("下载 {} 失败", url))?;
+/// 单次下载：发请求、校验状态码、读取响应体
+fn fetch_once(client: &Client, url: &str) -> Result<String> {
+    let response = client.get(url).send().context("请求失败")?;
 
-    if !response.status().is_success() {
-        anyhow::bail!("获取 {} 返回 HTTP {}", url, response.status());
+    let status = response.status();
+    if !status.is_success() {
+        anyhow::bail!("HTTP {}", status);
     }
 
-    let content = response
-        .text()
-        .context(format!("读取 {} 响应体失败", url))?;
+    response.text().context("读取响应体失败")
+}
+
+/// 带超时与指数退避重试的下载（1s、2s），抵御瞬时网络抖动
+///
+/// 所有失败（连接/超时/5xx/4xx）均重试，最多 3 次；
+/// 若最终仍失败，返回最后一次的错误供上层汇总。
+fn download_with_retry(url: &str) -> Result<String> {
+    let client = Client::builder()
+        .connect_timeout(CONNECT_TIMEOUT)
+        .timeout(REQUEST_TIMEOUT)
+        .build()
+        .context("构建 HTTP 客户端失败")?;
+
+    let mut last_err: Option<anyhow::Error> = None;
+    for attempt in 1..=MAX_ATTEMPTS {
+        match fetch_once(&client, url) {
+            Ok(content) => {
+                if attempt > 1 {
+                    println!("第 {} 次尝试成功（共重试 {} 次）", attempt, attempt - 1);
+                }
+                return Ok(content);
+            }
+            Err(e) => {
+                let retryable = attempt < MAX_ATTEMPTS;
+                eprintln!(
+                    "第 {}/{} 次下载 {} 失败: {:#}{}",
+                    attempt,
+                    MAX_ATTEMPTS,
+                    url,
+                    e,
+                    if retryable {
+                        ""
+                    } else {
+                        "（已耗尽重试）"
+                    }
+                );
+                last_err = Some(e);
+                if retryable {
+                    // 指数退避：1s、2s
+                    let backoff = 1u64 << (attempt - 1);
+                    println!("{}s 后重试...", backoff);
+                    std::thread::sleep(Duration::from_secs(backoff));
+                }
+            }
+        }
+    }
+
+    Err(last_err.unwrap_or_else(|| anyhow::anyhow!("未知错误")))
+        .context(format!("下载 {} 重试 {} 次后仍失败", url, MAX_ATTEMPTS))
+}
+
+/// 核心转换函数
+fn convert_url_to_file(url: &str, output_filename: &str) -> Result<usize> {
+    // 1. 发起网络请求下载原始文件内容（内置超时 + 指数退避重试，失败时错误链中已含 URL）
+    let content = download_with_retry(url)?;
 
     // 2. 初始化明文缓冲区，并添加 AutoProxy 必需的头部标识
     let mut raw_content = String::with_capacity(content.len() * 2);
